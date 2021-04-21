@@ -280,42 +280,38 @@ func GenerateGoSchema(sref *openapi3.SchemaRef, path []string) (Schema, error) {
 			outSchema.GoType = GenStructFromSchema(outSchema)
 		}
 		return outSchema, nil
-	} else if len(schema.Enum) > 0 {
+	} else {
 		err := resolveType(schema, path, &outSchema)
 		if err != nil {
 			return Schema{}, fmt.Errorf("error resolving primitive type: %w", err)
 		}
-		enumValues := make([]string, len(schema.Enum))
-		for i, enumValue := range schema.Enum {
-			enumValues[i] = fmt.Sprintf("%v", enumValue)
-		}
+		if len(schema.Enum) > 0 {
+			enumValues := make([]string, len(schema.Enum))
+			for i, enumValue := range schema.Enum {
+				enumValues[i] = fmt.Sprintf("%v", enumValue)
+			}
 
-		sanitizedValues := SanitizeEnumNames(enumValues)
-		outSchema.EnumValues = make(map[string]string, len(sanitizedValues))
-		var constNamePath []string
-		for k, v := range sanitizedValues {
-			if v == "" {
-				constNamePath = append(path, "Empty")
-			} else {
-				constNamePath = append(path, k)
+			enumDefs := make([]EnumConst, len(enumValues))
+			var constNamePath []string
+			for i, v := range enumValues {
+				if v == "" {
+					constNamePath = append(path, "Empty")
+				} else {
+					constNamePath = append(path, v)
+				}
+				enumDefs[i] = EnumConst{ SchemaNameToTypeName(PathToTypeName(constNamePath)),  v}
 			}
-			outSchema.EnumValues[SchemaNameToTypeName(PathToTypeName(constNamePath))] = v
-		}
-		if len(path) > 1 { // handle additional type only on non-toplevel types
-			typeName := SchemaNameToTypeName(PathToTypeName(path))
-			typeDef := TypeDefinition{
-				TypeName: typeName,
-				JsonName: strings.Join(path, "."),
-				Schema:   outSchema,
+			outSchema.EnumValues = DeDuplicateEnums(enumDefs)
+			if len(path) > 1 { // handle additional type only on non-toplevel types
+				typeName := SchemaNameToTypeName(PathToTypeName(path))
+				typeDef := TypeDefinition{
+					TypeName: typeName,
+					JsonName: strings.Join(path, "."),
+					Schema:   outSchema,
+				}
+				outSchema.AdditionalTypes = append(outSchema.AdditionalTypes, typeDef)
+				outSchema.RefType = typeName
 			}
-			outSchema.AdditionalTypes = append(outSchema.AdditionalTypes, typeDef)
-			outSchema.RefType = typeName
-		}
-		//outSchema.RefType = typeName
-	} else {
-		err := resolveType(schema, path, &outSchema)
-		if err != nil {
-			return Schema{}, fmt.Errorf("error resolving primitive type")
 		}
 	}
 	return outSchema, nil
